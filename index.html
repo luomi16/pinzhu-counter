@@ -202,12 +202,14 @@
     .color-count { font-size: 1.5rem; font-weight: 800; }
     .color-count-label { font-size: 0.72rem; color: var(--text-secondary); margin-top: -8px; }
     .stock-badge {
-      display: inline-block;
-      font-size: 0.7rem;
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      font-size: 0.65rem;
       font-weight: 700;
-      padding: 2px 7px;
+      padding: 2px 6px;
       border-radius: 20px;
-      margin-top: 3px;
+      pointer-events: none;
     }
     .stock-empty  { background: #ffeaea; color: #d63031; }
     .stock-danger { background: #fff3e0; color: #e67e22; }
@@ -837,9 +839,9 @@ function renderInventory() {
         <div class="color-swatch" style="background:${c.hex}"></div>
         <div class="color-name">${esc(c.name)}</div>
       </div>
+      ${(c.count||0) === 0 ? '<span class="stock-badge stock-empty">❌ 缺货</span>' : (c.count||0) < 50 ? '<span class="stock-badge stock-danger">🔴 极少</span>' : (c.count||0) < 200 ? '<span class="stock-badge stock-warn">⚠️ 不足</span>' : ''}
       <div class="color-count" style="color:${c.hex}">${(c.count||0).toLocaleString()}</div>
       <div class="color-count-label">颗</div>
-      ${(c.count||0) === 0 ? '<span class="stock-badge stock-empty">❌ 缺货</span>' : (c.count||0) < 50 ? '<span class="stock-badge stock-danger">🔴 极少</span>' : (c.count||0) < 200 ? '<span class="stock-badge stock-warn">⚠️ 不足</span>' : ''}
       <div class="color-controls">
         <button class="btn-count minus" onclick="adjustCount('${c.id}',-1)">−</button>
         <input class="count-input" type="number" min="0" value="${c.count||0}"
