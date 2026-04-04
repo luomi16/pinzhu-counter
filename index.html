@@ -60,7 +60,12 @@
         </div>
         <div id="previewSection" style="display:none">
           <img id="previewImg" alt="图纸预览" style="max-width:100%;border-radius:10px;display:block" />
-          <button class="btn btn-secondary btn-sm" style="margin-top:10px;width:100%" onclick="resetAnalysis()">更换图片</button>
+          <button class="btn btn-primary btn-sm" style="margin-top:10px;width:100%" id="ocrBtn" onclick="startOCR()">🔍 自动识别</button>
+          <button class="btn btn-secondary btn-sm" style="margin-top:6px;width:100%" onclick="resetAnalysis()">更换图片</button>
+          <div id="ocrProgressWrap" style="display:none;margin-top:10px">
+            <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+            <div class="progress-text" id="progressText">准备中…</div>
+          </div>
         </div>
       </div>
 
@@ -212,6 +217,7 @@
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

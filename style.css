@@ -536,6 +536,25 @@ input[type="color"] {
 }
 .usage-textarea:focus { border-color: var(--primary); }
 
+.progress-bar {
+  height: 7px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--primary-light));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.progress-text {
+  text-align: center;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  margin-top: 5px;
+}
+
 .analysis-table-wrap {
   background: white;
   border-radius: 14px;

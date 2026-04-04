@@ -79,7 +79,7 @@ async function ghPut(data) {
   const { repo, token } = cfg();
   if (!token) throw new Error('需要设置 Token 才能保存');
   const url = `https://api.github.com/repos/${GITHUB_USER}/${repo}/contents/data.json`;
-  const content = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
+  const content = btoa(new TextEncoder().encode(JSON.stringify(data, null, 2)).reduce((s,b) => s + String.fromCharCode(b), ''));
   const body = { message: `sync ${new Date().toISOString()}`, content };
   if (state.sha) body.sha = state.sha;
   const res = await fetch(url, {
@@ -106,7 +106,7 @@ async function loadData() {
     const file = await ghGet();
     if (file) {
       state.sha = file.sha;
-      const decoded = decodeURIComponent(escape(atob(file.content.replace(/\s/g, ''))));
+      const decoded = new TextDecoder().decode(Uint8Array.from(atob(file.content.replace(/\s/g, '')), c => c.charCodeAt(0)));
       const data = JSON.parse(decoded);
       state.colors   = data.colors   || [];
       state.projects = data.projects || [];
@@ -536,6 +536,133 @@ function loadImageFile(file) {
     document.getElementById('previewSection').style.display = 'block';
   };
   reader.readAsDataURL(file);
+}
+
+// ─── OCR ──────────────────────────────────────────────
+// Crop bottom strip of image, scale up, and produce multiple contrast variants
+function buildOCRVariants(img) {
+  const variants = [];
+  // Try different crop heights: legend is usually bottom 12-25% of image
+  for (const ratio of [0.12, 0.18, 0.25]) {
+    const srcY  = Math.floor(img.naturalHeight * (1 - ratio));
+    const srcH  = img.naturalHeight - srcY;
+    const scale = 4; // upscale for sharper text
+    const w = img.naturalWidth * scale;
+    const h = srcH * scale;
+
+    // Version A: invert (white text on color → black text on inverted color)
+    const cvA = document.createElement('canvas');
+    cvA.width = w; cvA.height = h;
+    const ctxA = cvA.getContext('2d');
+    ctxA.drawImage(img, 0, srcY, img.naturalWidth, srcH, 0, 0, w, h);
+    const idA = ctxA.getImageData(0, 0, w, h);
+    for (let i = 0; i < idA.data.length; i += 4) {
+      idA.data[i]   = 255 - idA.data[i];
+      idA.data[i+1] = 255 - idA.data[i+1];
+      idA.data[i+2] = 255 - idA.data[i+2];
+    }
+    ctxA.putImageData(idA, 0, 0);
+    variants.push(cvA.toDataURL());
+
+    // Version B: grayscale + threshold (good for dark-on-light numbers)
+    const cvB = document.createElement('canvas');
+    cvB.width = w; cvB.height = h;
+    const ctxB = cvB.getContext('2d');
+    ctxB.drawImage(img, 0, srcY, img.naturalWidth, srcH, 0, 0, w, h);
+    const idB = ctxB.getImageData(0, 0, w, h);
+    for (let i = 0; i < idB.data.length; i += 4) {
+      const lum = 0.299*idB.data[i] + 0.587*idB.data[i+1] + 0.114*idB.data[i+2];
+      const v = lum < 160 ? 0 : 255; // threshold
+      idB.data[i] = idB.data[i+1] = idB.data[i+2] = v;
+    }
+    ctxB.putImageData(idB, 0, 0);
+    variants.push(cvB.toDataURL());
+  }
+  return variants;
+}
+
+function extractPairsFromText(text) {
+  const results = new Map();
+  const norm = text.replace(/[:,\-]/g, ' ').replace(/\s+/g, ' ');
+  // Match color-code + number pairs
+  const re = /\b([A-Ma-m]\d{1,2})\b\s+(\d{2,6})\b/g;
+  let m;
+  while ((m = re.exec(norm)) !== null) {
+    const code = m[1].toUpperCase();
+    const qty  = parseInt(m[2]);
+    // Validate: code must exist in known colors, qty reasonable
+    const known = state.colors.find(c => c.id === code);
+    if (known && qty > 0 && qty < 100000) {
+      // Keep largest qty seen (usually correct)
+      if (!results.has(code) || results.get(code) < qty) results.set(code, qty);
+    }
+  }
+  return results;
+}
+
+async function startOCR() {
+  if (typeof Tesseract === 'undefined') {
+    showToast('OCR 库未加载，请检查网络后刷新', 'error'); return;
+  }
+  const btn = document.getElementById('ocrBtn');
+  btn.disabled = true;
+  document.getElementById('ocrProgressWrap').style.display = 'block';
+  setProgress(0, '加载识别引擎…');
+
+  try {
+    const img = document.getElementById('previewImg');
+    const variants = buildOCRVariants(img);
+
+    const worker = await Tesseract.createWorker('eng', 1, {
+      logger: m => {
+        if (m.status === 'recognizing text')
+          setProgress(m.progress * 0.9, `识别中 ${Math.round(m.progress*100)}%`);
+        else if (m.status === 'loading language traineddata')
+          setProgress(0, '加载语言包（首次较慢）…');
+      }
+    });
+    await worker.setParameters({
+      tessedit_char_whitelist: 'ABCDEFGHIJKLMabcdefghijklm0123456789 ',
+      tessedit_pageseg_mode: '6',
+    });
+
+    const merged = new Map();
+    for (let i = 0; i < variants.length; i++) {
+      setProgress(0.1 + (i / variants.length) * 0.8, `识别变体 ${i+1}/${variants.length}…`);
+      const { data: { text } } = await worker.recognize(variants[i]);
+      const pairs = extractPairsFromText(text);
+      pairs.forEach((qty, code) => {
+        if (!merged.has(code) || merged.get(code) < qty) merged.set(code, qty);
+      });
+    }
+    await worker.terminate();
+
+    setProgress(1, '完成');
+
+    if (merged.size === 0) {
+      showToast('未识别到色号，请手动输入', 'error');
+    } else {
+      // Fill text input with recognized results
+      const lines = [...merged.entries()]
+        .sort(([a],[b]) => a.localeCompare(b))
+        .map(([code, qty]) => `${code} ${qty}`)
+        .join('\n');
+      const ta = document.getElementById('usageTextInput');
+      ta.value = lines;
+      parseTextInput(lines);
+      showToast(`识别到 ${merged.size} 个色号，请核对`, 'success');
+    }
+  } catch(e) {
+    showToast('识别失败：' + e.message, 'error');
+  }
+
+  document.getElementById('ocrProgressWrap').style.display = 'none';
+  btn.disabled = false;
+}
+
+function setProgress(pct, text) {
+  document.getElementById('progressFill').style.width = Math.round(pct*100) + '%';
+  document.getElementById('progressText').textContent = text;
 }
 
 // Parse text input: supports "G7 821 A2 584" or "G7 821\nA2 584" or "G7:821, A2:584"
