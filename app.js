@@ -534,198 +534,42 @@ function loadImageFile(file) {
     document.getElementById('previewImg').src = ev.target.result;
     document.getElementById('uploadZone').style.display = 'none';
     document.getElementById('previewSection').style.display = 'block';
-    document.getElementById('analysisResultSection').style.display = 'none';
-    document.getElementById('ocrProgressWrap').style.display = 'none';
-    document.getElementById('ocrBtn').disabled = false;
   };
   reader.readAsDataURL(file);
 }
 
-// Preprocess: crop bottom legend area + multiple contrast versions for best OCR
-function preprocessImageForOCR(img) {
-  const variants = [];
-
-  // We'll scan multiple bottom-strip heights and multiple contrast modes
-  const stripRatios = [0.18, 0.22, 0.28, 0.35]; // bottom X% of image
-  const modes = ['invert', 'high-contrast', 'gray'];
-
-  for (const ratio of stripRatios) {
-    const canvas = document.createElement('canvas');
-    const scale = 3; // upscale for better OCR
-    const srcY = Math.floor(img.naturalHeight * (1 - ratio));
-    const srcH = img.naturalHeight - srcY;
-    canvas.width  = img.naturalWidth  * scale;
-    canvas.height = srcH * scale;
-    const ctx = canvas.getContext('2d');
-    // Draw cropped + upscaled
-    ctx.drawImage(img, 0, srcY, img.naturalWidth, srcH, 0, 0, canvas.width, canvas.height);
-
-    // Apply pixel manipulation per mode
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const d = imageData.data;
-
-    for (let i = 0; i < d.length; i += 4) {
-      const r = d[i], g = d[i+1], b = d[i+2];
-      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-
-      if (modes[variants.length % modes.length] === 'invert') {
-        // Invert so white text on dark bg becomes black on white
-        d[i] = 255 - r; d[i+1] = 255 - g; d[i+2] = 255 - b;
-      } else if (modes[variants.length % modes.length] === 'high-contrast') {
-        // High contrast grayscale
-        const v = lum > 128 ? 255 : 0;
-        d[i] = d[i+1] = d[i+2] = v;
-      } else {
-        // Grayscale only
-        d[i] = d[i+1] = d[i+2] = lum;
-      }
-    }
-    ctx.putImageData(imageData, 0, 0);
-    variants.push(canvas.toDataURL('image/png'));
-  }
-
-  // Also add full image (grayscale) as fallback
-  const full = document.createElement('canvas');
-  full.width = img.naturalWidth;
-  full.height = img.naturalHeight;
-  const fctx = full.getContext('2d');
-  fctx.drawImage(img, 0, 0);
-  const fd = fctx.getImageData(0, 0, full.width, full.height);
-  for (let i = 0; i < fd.data.length; i += 4) {
-    const lum = 0.299*fd.data[i] + 0.587*fd.data[i+1] + 0.114*fd.data[i+2];
-    fd.data[i] = fd.data[i+1] = fd.data[i+2] = lum;
-  }
-  fctx.putImageData(fd, 0, 0);
-  variants.push(full.toDataURL('image/png'));
-
-  return variants;
-}
-
-async function startOCR() {
-  if (typeof Tesseract === 'undefined') {
-    showToast('OCR 库未加载，请检查网络后刷新', 'error');
-    return;
-  }
-  document.getElementById('ocrBtn').disabled = true;
-  document.getElementById('ocrProgressWrap').style.display = 'block';
-  setProgress(0, '加载识别引擎…');
-
-  try {
-    const img = document.getElementById('previewImg');
-    const variants = preprocessImageForOCR(img);
-
-    const worker = await Tesseract.createWorker('eng', 1, {
-      logger: m => {
-        if (m.status === 'recognizing text') {
-          setProgress(m.progress, `识别中… ${Math.round(m.progress * 100)}%`);
-        } else if (m.status === 'loading tesseract core') {
-          setProgress(0, '加载核心…');
-        } else if (m.status === 'loading language traineddata') {
-          setProgress(0, '加载语言包（首次较慢）…');
-        } else if (m.status === 'initializing tesseract') {
-          setProgress(0, '初始化…');
-        }
-      }
-    });
-
-    // Set params optimized for short alphanumeric codes
-    await worker.setParameters({
-      tessedit_char_whitelist: 'ABCDEFGHIJKLM0123456789 ',
-      tessedit_pageseg_mode: '6', // Assume uniform block of text
-    });
-
-    // Run OCR on all variants and merge results
-    const allResults = new Map();
-    for (let i = 0; i < variants.length; i++) {
-      setProgress((i / variants.length) * 0.9, `识别变体 ${i+1}/${variants.length}…`);
-      const { data: { text } } = await worker.recognize(variants[i]);
-      const parsed = parseOCRText(text);
-      for (const row of parsed) {
-        if (!allResults.has(row.colorId)) {
-          allResults.set(row.colorId, row.qty);
-        } else {
-          // Keep the larger qty (more likely to be correct)
-          if (row.qty > allResults.get(row.colorId)) {
-            allResults.set(row.colorId, row.qty);
-          }
-        }
-      }
-    }
-    await worker.terminate();
-
-    // Convert merged map back to array, sorted
-    analysisData = [...allResults.entries()]
-      .sort(([a], [b]) => {
-        const aL = a.match(/^[A-M]+/)?.[0] || '';
-        const bL = b.match(/^[A-M]+/)?.[0] || '';
-        if (aL !== bL) return aL.localeCompare(bL);
-        return parseInt(a.match(/\d+/)?.[0] || 0) - parseInt(b.match(/\d+/)?.[0] || 0);
-      })
-      .map(([colorId, qty]) => ({ colorId, qty }));
-
-    setProgress(1, '完成');
-    document.getElementById('ocrProgressWrap').style.display = 'none';
-    document.getElementById('analysisResultSection').style.display = 'block';
-    renderAnalysisTable();
-
-    if (analysisData.length === 0) {
-      showToast('未识别到色号，请手动添加', 'error');
-    } else {
-      showToast(`识别到 ${analysisData.length} 个色号，请核对后扣减`, 'success');
-    }
-  } catch (e) {
-    showToast('识别失败：' + e.message, 'error');
-    document.getElementById('ocrProgressWrap').style.display = 'none';
-  }
-  document.getElementById('ocrBtn').disabled = false;
-}
-
-function setProgress(pct, text) {
-  document.getElementById('progressFill').style.width = Math.round(pct * 100) + '%';
-  document.getElementById('progressText').textContent = text;
-}
-
-function parseOCRText(text) {
+// Parse text input: supports "G7 821 A2 584" or "G7 821\nA2 584" or "G7:821, A2:584"
+function parseTextInput(text) {
   const results = new Map();
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l);
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // Pattern 1: "G7 821" or "G7: 821" — code and number on same line
-    const sameLineMatches = line.matchAll(/\b([A-M]\d{1,2})\b\s*:?\s*(\d{2,5})\b/gi);
-    for (const m of sameLineMatches) {
-      const code = m[1].toUpperCase();
-      const qty = parseInt(m[2]);
-      if (qty >= 10 && qty <= 99999) {
-        if (!results.has(code) || results.get(code) < qty) results.set(code, qty);
-      }
-    }
-
-    // Pattern 2: code alone on a line, number on the next line
-    const codeOnly = line.match(/^([A-M]\d{1,2})$/i);
-    if (codeOnly && i + 1 < lines.length) {
-      const nextNum = lines[i + 1].match(/^(\d{2,5})$/);
-      if (nextNum) {
-        const code = codeOnly[1].toUpperCase();
-        const qty = parseInt(nextNum[1]);
-        if (qty >= 10 && qty <= 99999) {
-          if (!results.has(code) || results.get(code) < qty) results.set(code, qty);
-        }
-      }
-    }
+  // Normalize separators
+  const normalized = text.replace(/[:,]/g, ' ').replace(/\s+/g, ' ');
+  // Match all (colorCode number) pairs
+  const re = /\b([A-Ma-m]\d{1,2})\b\s+(\d{1,6})\b/g;
+  let m;
+  while ((m = re.exec(normalized)) !== null) {
+    const code = m[1].toUpperCase();
+    const qty = parseInt(m[2]);
+    if (qty > 0) results.set(code, qty);
   }
 
-  // Sort by series then number
-  return [...results.entries()]
+  analysisData = [...results.entries()]
     .sort(([a], [b]) => {
-      const aLetter = a.match(/^[A-M]+/)[0];
-      const bLetter = b.match(/^[A-M]+/)[0];
-      if (aLetter !== bLetter) return aLetter.localeCompare(bLetter);
-      return parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]);
+      const aL = a.match(/^[A-M]+/)?.[0] || '';
+      const bL = b.match(/^[A-M]+/)?.[0] || '';
+      if (aL !== bL) return aL.localeCompare(bL);
+      return parseInt(a.match(/\d+/)?.[0] || 0) - parseInt(b.match(/\d+/)?.[0] || 0);
     })
     .map(([colorId, qty]) => ({ colorId, qty }));
+
+  const resultSection = document.getElementById('analysisResultSection');
+  if (analysisData.length > 0) {
+    resultSection.style.display = 'block';
+    renderAnalysisTable();
+  } else {
+    resultSection.style.display = 'none';
+  }
 }
+
 
 function renderAnalysisTable() {
   const tbody = document.getElementById('analysisTableBody');
@@ -824,5 +668,6 @@ function resetAnalysis() {
   document.getElementById('imageInput').value = '';
   document.getElementById('uploadZone').style.display = '';
   document.getElementById('previewSection').style.display = 'none';
+  document.getElementById('usageTextInput').value = '';
   document.getElementById('analysisResultSection').style.display = 'none';
 }
