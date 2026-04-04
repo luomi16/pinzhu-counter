@@ -466,7 +466,7 @@ function deleteUsage(projectId, colorId) {
 // ─── UI Helpers ───────────────────────────────────────
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t, i) => {
-    t.classList.toggle('active', ['inventory','projects'][i] === name);
+    t.classList.toggle('active', ['inventory','projects','analysis'][i] === name);
   });
   document.querySelectorAll('.tab-panel').forEach(p => {
     p.classList.toggle('active', p.id === 'tab-' + name);
@@ -506,3 +506,228 @@ function esc(s) {
 
 // ─── Init ─────────────────────────────────────────────
 loadData();
+
+// ─── Analysis ─────────────────────────────────────────
+let analysisData = []; // [{colorId, qty}]
+
+function onDragOver(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.add('dragover');
+}
+function onDragLeave() {
+  document.getElementById('uploadZone').classList.remove('dragover');
+}
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) loadImageFile(file);
+}
+function onImageSelected(e) {
+  const file = e.target.files[0];
+  if (file) loadImageFile(file);
+}
+
+function loadImageFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    document.getElementById('previewImg').src = ev.target.result;
+    document.getElementById('uploadZone').style.display = 'none';
+    document.getElementById('previewSection').style.display = 'block';
+    document.getElementById('analysisResultSection').style.display = 'none';
+    document.getElementById('ocrProgressWrap').style.display = 'none';
+    document.getElementById('ocrBtn').disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function startOCR() {
+  if (typeof Tesseract === 'undefined') {
+    showToast('OCR 库未加载，请检查网络后刷新', 'error');
+    return;
+  }
+  document.getElementById('ocrBtn').disabled = true;
+  document.getElementById('ocrProgressWrap').style.display = 'block';
+  setProgress(0, '加载识别引擎…');
+
+  try {
+    const worker = await Tesseract.createWorker('eng', 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          setProgress(m.progress, `识别中… ${Math.round(m.progress * 100)}%`);
+        } else if (m.status === 'loading tesseract core') {
+          setProgress(0, '加载核心…');
+        } else if (m.status === 'loading language traineddata') {
+          setProgress(0, '加载语言包（首次较慢）…');
+        } else if (m.status === 'initializing tesseract') {
+          setProgress(0, '初始化…');
+        }
+      }
+    });
+
+    const { data: { text } } = await worker.recognize(document.getElementById('previewImg'));
+    await worker.terminate();
+
+    analysisData = parseOCRText(text);
+    document.getElementById('ocrProgressWrap').style.display = 'none';
+    document.getElementById('analysisResultSection').style.display = 'block';
+    renderAnalysisTable();
+
+    if (analysisData.length === 0) {
+      showToast('未识别到色号，请手动添加', 'error');
+    } else {
+      showToast(`识别到 ${analysisData.length} 个色号，请核对后扣减`, 'success');
+    }
+  } catch (e) {
+    showToast('识别失败：' + e.message, 'error');
+    document.getElementById('ocrProgressWrap').style.display = 'none';
+  }
+  document.getElementById('ocrBtn').disabled = false;
+}
+
+function setProgress(pct, text) {
+  document.getElementById('progressFill').style.width = Math.round(pct * 100) + '%';
+  document.getElementById('progressText').textContent = text;
+}
+
+function parseOCRText(text) {
+  const results = new Map();
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Pattern 1: "G7 821" or "G7: 821" — code and number on same line
+    const sameLineMatches = line.matchAll(/\b([A-M]\d{1,2})\b\s*:?\s*(\d{2,5})\b/gi);
+    for (const m of sameLineMatches) {
+      const code = m[1].toUpperCase();
+      const qty = parseInt(m[2]);
+      if (qty >= 10 && qty <= 99999) {
+        if (!results.has(code) || results.get(code) < qty) results.set(code, qty);
+      }
+    }
+
+    // Pattern 2: code alone on a line, number on the next line
+    const codeOnly = line.match(/^([A-M]\d{1,2})$/i);
+    if (codeOnly && i + 1 < lines.length) {
+      const nextNum = lines[i + 1].match(/^(\d{2,5})$/);
+      if (nextNum) {
+        const code = codeOnly[1].toUpperCase();
+        const qty = parseInt(nextNum[1]);
+        if (qty >= 10 && qty <= 99999) {
+          if (!results.has(code) || results.get(code) < qty) results.set(code, qty);
+        }
+      }
+    }
+  }
+
+  // Sort by series then number
+  return [...results.entries()]
+    .sort(([a], [b]) => {
+      const aLetter = a.match(/^[A-M]+/)[0];
+      const bLetter = b.match(/^[A-M]+/)[0];
+      if (aLetter !== bLetter) return aLetter.localeCompare(bLetter);
+      return parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]);
+    })
+    .map(([colorId, qty]) => ({ colorId, qty }));
+}
+
+function renderAnalysisTable() {
+  const tbody = document.getElementById('analysisTableBody');
+  tbody.innerHTML = analysisData.map((row, i) => {
+    const color = state.colors.find(c => c.id === row.colorId.toUpperCase());
+    const stock = color ? (color.count || 0) : null;
+    const diff = stock !== null ? stock - row.qty : null;
+    const swatchHtml = color
+      ? `<div style="width:16px;height:16px;border-radius:50%;background:${color.hex};border:1.5px solid rgba(0,0,0,0.1);flex-shrink:0"></div>`
+      : `<div style="width:16px;height:16px;border-radius:50%;background:#ddd;flex-shrink:0"></div>`;
+    const stockCell = stock !== null ? stock.toLocaleString() : '<span class="not-found">未找到</span>';
+    const diffCell = diff !== null
+      ? `<span class="${diff >= 0 ? 'diff-ok' : 'diff-warn'}">${diff >= 0 ? '+' : ''}${diff.toLocaleString()} ${diff >= 0 ? '✓' : '⚠️'}</span>`
+      : '—';
+
+    return `<tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${swatchHtml}
+          <input class="inline-input code-input" value="${esc(row.colorId)}"
+            onblur="updateAnalysisField(${i},'colorId',this.value)" />
+        </div>
+      </td>
+      <td><input class="inline-input qty-input" type="number" min="0" value="${row.qty}"
+        onblur="updateAnalysisField(${i},'qty',this.value)" /></td>
+      <td>${stockCell}</td>
+      <td>${diffCell}</td>
+      <td><button class="btn-tiny" onclick="deleteAnalysisRow(${i})" title="删除">🗑️</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function updateAnalysisField(index, field, value) {
+  if (!analysisData[index]) return;
+  if (field === 'qty') {
+    analysisData[index].qty = Math.max(0, parseInt(value) || 0);
+  } else {
+    analysisData[index].colorId = value.trim().toUpperCase();
+  }
+  renderAnalysisTable();
+}
+
+function addAnalysisRow() {
+  analysisData.push({ colorId: '', qty: 0 });
+  renderAnalysisTable();
+  setTimeout(() => {
+    const inputs = document.querySelectorAll('.code-input');
+    if (inputs.length) inputs[inputs.length - 1].focus();
+  }, 50);
+}
+
+function deleteAnalysisRow(index) {
+  analysisData.splice(index, 1);
+  renderAnalysisTable();
+}
+
+function applyDeduction() {
+  if (!analysisData.length) { showToast('没有数据可扣减', 'error'); return; }
+
+  const valid = analysisData.filter(row => {
+    return state.colors.find(c => c.id === row.colorId.toUpperCase()) && row.qty > 0;
+  });
+
+  if (!valid.length) { showToast('没有匹配的色号，请检查色号是否正确', 'error'); return; }
+
+  const notFound = analysisData.filter(row => !state.colors.find(c => c.id === row.colorId.toUpperCase()) && row.colorId);
+  const insufficient = valid.filter(row => {
+    const c = state.colors.find(x => x.id === row.colorId.toUpperCase());
+    return c && (c.count || 0) < row.qty;
+  });
+
+  let confirmMsg = `确认为 ${valid.length} 个色号扣减库存？`;
+  if (insufficient.length) confirmMsg += `\n\n⚠️ 以下 ${insufficient.length} 个色号库存不足，将置为 0：\n` + insufficient.map(r => r.colorId).join('、');
+  if (notFound.length) confirmMsg += `\n\n❌ 以下色号未找到，将跳过：\n` + notFound.map(r => r.colorId).join('、');
+
+  if (!confirm(confirmMsg)) return;
+
+  valid.forEach(row => {
+    const c = state.colors.find(x => x.id === row.colorId.toUpperCase());
+    if (c) c.count = Math.max(0, (c.count || 0) - row.qty);
+  });
+
+  render();
+  scheduleSave();
+  renderAnalysisTable(); // Refresh diff column
+
+  if (insufficient.length) {
+    showToast(`扣减完成，${insufficient.length} 个色号库存不足已置零`, 'error');
+  } else {
+    showToast(`已成功扣减 ${valid.length} 个色号 ✓`, 'success');
+  }
+}
+
+function resetAnalysis() {
+  analysisData = [];
+  document.getElementById('imageInput').value = '';
+  document.getElementById('uploadZone').style.display = '';
+  document.getElementById('previewSection').style.display = 'none';
+  document.getElementById('analysisResultSection').style.display = 'none';
+}

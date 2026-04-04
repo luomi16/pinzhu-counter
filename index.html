@@ -23,6 +23,7 @@
 <nav class="tabs">
   <div class="tab active" onclick="switchTab('inventory')">库存管理</div>
   <div class="tab" onclick="switchTab('projects')">项目记录</div>
+  <div class="tab" onclick="switchTab('analysis')">图纸解析</div>
 </nav>
 
 <!-- Content -->
@@ -41,6 +42,58 @@
       <button class="btn btn-primary btn-sm" onclick="openAddProject()">+ 新建项目</button>
     </div>
     <div class="project-list" id="projectList"></div>
+  </div>
+
+  <!-- Analysis -->
+  <div class="tab-panel" id="tab-analysis">
+    <!-- Upload zone -->
+    <div class="upload-zone" id="uploadZone"
+      onclick="document.getElementById('imageInput').click()"
+      ondrop="onDrop(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
+      <div class="upload-icon">🖼️</div>
+      <div>点击或拖拽上传图纸图片</div>
+      <div class="upload-hint">自动识别底部色号汇总区域，支持手动修正</div>
+      <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="onImageSelected(event)" />
+    </div>
+
+    <!-- Preview + OCR -->
+    <div class="preview-section" id="previewSection" style="display:none">
+      <img id="previewImg" alt="图纸预览" />
+      <div class="preview-actions">
+        <button class="btn btn-secondary" onclick="resetAnalysis()">重新上传</button>
+        <button class="btn btn-primary" id="ocrBtn" onclick="startOCR()">🔍 开始解析</button>
+      </div>
+      <div id="ocrProgressWrap" style="display:none">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        <div class="progress-text" id="progressText">准备中…</div>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div id="analysisResultSection" style="display:none">
+      <div class="section-header" style="margin-top:16px">
+        <span class="section-title">识别结果（可手动修改）</span>
+        <button class="btn btn-secondary btn-sm" onclick="addAnalysisRow()">+ 添加行</button>
+      </div>
+      <div class="analysis-table-wrap">
+        <table class="analysis-table">
+          <thead>
+            <tr>
+              <th>色号</th>
+              <th>需要</th>
+              <th>当前库存</th>
+              <th>差额</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="analysisTableBody"></tbody>
+        </table>
+      </div>
+      <div class="analysis-actions">
+        <button class="btn btn-secondary" onclick="resetAnalysis()">重新上传</button>
+        <button class="btn btn-primary" onclick="applyDeduction()">✂️ 一键扣减库存</button>
+      </div>
+    </div>
   </div>
 </main>
 
@@ -148,6 +201,7 @@
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

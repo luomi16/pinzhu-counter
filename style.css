@@ -466,8 +466,126 @@ input[type="color"] {
   height: 44px;
 }
 
+/* ─── Analysis Tab ─────────────────────────────────── */
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: 14px;
+  padding: 48px 20px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  background: white;
+  font-weight: 500;
+  font-size: 0.92rem;
+  transition: all 0.2s;
+  box-shadow: var(--shadow);
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--primary);
+  background: #f0eeff;
+  color: var(--primary);
+}
+.upload-icon { font-size: 2.8rem; margin-bottom: 10px; }
+.upload-hint { font-size: 0.78rem; color: var(--text-secondary); margin-top: 6px; font-weight: 400; }
+.upload-zone:hover .upload-hint, .upload-zone.dragover .upload-hint { color: var(--primary-light); }
+
+.preview-section {
+  background: white;
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+.preview-section img {
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 10px;
+  display: block;
+  margin: 0 auto 14px;
+  object-fit: contain;
+}
+.preview-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.progress-bar {
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 14px 0 6px;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--primary-light));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.progress-text {
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.analysis-table-wrap {
+  background: white;
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.analysis-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.analysis-table th {
+  background: var(--bg);
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.analysis-table td {
+  padding: 9px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 0.87rem;
+  vertical-align: middle;
+}
+.analysis-table tr:hover td { background: #fafafa; }
+.diff-ok   { color: var(--success); font-weight: 700; }
+.diff-warn { color: var(--danger);  font-weight: 700; }
+.not-found { color: var(--text-secondary); font-style: italic; font-size: 0.8rem; }
+
+.inline-input {
+  padding: 5px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: 7px;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border 0.2s;
+  font-family: inherit;
+  background: white;
+}
+.inline-input:focus { border-color: var(--primary); }
+.inline-input.code-input { width: 64px; text-transform: uppercase; font-weight: 600; }
+.inline-input.qty-input  { width: 80px; text-align: center; }
+
+.analysis-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+/* ─── Responsive ──────────────────────────────────── */
 @media (max-width: 500px) {
   .color-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   .stats-bar { gap: 8px; }
   .content { padding: 14px; }
+  .analysis-table th:nth-child(3),
+  .analysis-table td:nth-child(3) { display: none; }
 }
