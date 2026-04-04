@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>拼豆计数系统</title>
+  <style>
+    :root {
+      --primary: #6c5ce7;
+      --primary-light: #a29bfe;
+      --bg: #f4f3ff;
+      --card-bg: #ffffff;
+      --text: #2d3436;
+      --text-secondary: #636e72;
+      --border: #dfe6e9;
+      --success: #00b894;
+      --danger: #d63031;
+      --warning: #f39c12;
+      --shadow: 0 2px 12px rgba(108,92,231,0.1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+      color: white;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 12px rgba(108,92,231,0.3);
+    }
+    .header h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: 0.5px; }
+    .sync-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      opacity: 0.92;
+    }
+    .sync-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #55efc4;
+      flex-shrink: 0;
+    }
+    .sync-dot.syncing { background: #ffeaa7; animation: blink 0.8s infinite; }
+    .sync-dot.error { background: #ff7675; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .btn-icon {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      color: white;
+      width: 34px; height: 34px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
+    }
+    .btn-icon:hover { background: rgba(255,255,255,0.35); }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      background: white;
+      border-bottom: 2px solid var(--border);
+      padding: 0 20px;
+    }
+    .tab {
+      padding: 13px 18px;
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.2s;
+    }
+    .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    /* Content */
+    .content { padding: 20px; max-width: 960px; margin: 0 auto; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Stats */
+    .stats-bar { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+    .stat-chip {
+      background: white;
+      border-radius: 10px;
+      padding: 10px 18px;
+      box-shadow: var(--shadow);
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+    }
+    .stat-chip strong { color: var(--primary); font-size: 1.2rem; display: block; font-weight: 700; }
+
+    /* Section header */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    /* Color Grid */
+    .color-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+      gap: 12px;
+    }
+    .color-card {
+      background: white;
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .color-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(108,92,231,0.15); }
+    .color-swatch-row { display: flex; align-items: center; gap: 10px; }
+    .color-swatch {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      flex-shrink: 0;
+    }
+    .color-name { font-weight: 600; font-size: 0.88rem; line-height: 1.3; }
+    .color-count { font-size: 1.5rem; font-weight: 800; }
+    .color-count-label { font-size: 0.72rem; color: var(--text-secondary); margin-top: -8px; }
+    .color-controls { display: flex; gap: 4px; align-items: center; }
+    .btn-count {
+      width: 28px; height: 28px;
+      border: 1.5px solid var(--border);
+      background: white;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+      color: var(--text);
+      flex-shrink: 0;
+    }
+    .btn-count:hover { transform: scale(1.1); }
+    .btn-count.plus:hover { background: var(--primary); color: white; border-color: var(--primary); }
+    .btn-count.minus:hover { background: var(--danger); color: white; border-color: var(--danger); }
+    .count-input {
+      flex: 1;
+      border: 1.5px solid var(--border);
+      border-radius: 7px;
+      padding: 4px 6px;
+      font-size: 0.85rem;
+      text-align: center;
+      min-width: 0;
+      outline: none;
+      transition: border 0.2s;
+    }
+    .count-input:focus { border-color: var(--primary); }
+    .card-actions {
+      position: absolute;
+      top: 8px; right: 8px;
+      display: flex; gap: 2px;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .color-card:hover .card-actions { opacity: 1; }
+    .btn-tiny {
+      width: 22px; height: 22px;
+      border: none;
+      background: var(--bg);
+      cursor: pointer;
+      border-radius: 5px;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .btn-tiny:hover { background: var(--border); }
+
+    /* Add color card */
+    .add-color-btn {
+      border: 2px dashed var(--border);
+      border-radius: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-secondary);
+      gap: 8px;
+      font-weight: 500;
+      font-size: 0.88rem;
+      background: transparent;
+      transition: all 0.2s;
+      min-height: 160px;
+    }
+    .add-color-btn .plus-icon { font-size: 1.8rem; line-height: 1; }
+    .add-color-btn:hover { border-color: var(--primary); color: var(--primary); background: #f0eeff; }
+
+    /* Projects */
+    .project-list { display: flex; flex-direction: column; gap: 12px; }
+    .project-card {
+      background: white;
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      transition: box-shadow 0.2s;
+    }
+    .project-card:hover { box-shadow: 0 6px 20px rgba(108,92,231,0.15); }
+    .project-header {
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+    .project-info { flex: 1; min-width: 0; }
+    .project-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 3px; }
+    .project-meta { font-size: 0.78rem; color: var(--text-secondary); }
+    .project-header-right { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+    .project-arrow {
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+      transition: transform 0.2s;
+      display: inline-block;
+    }
+    .project-arrow.open { transform: rotate(90deg); }
+    .project-body {
+      border-top: 1px solid var(--border);
+      padding: 14px 18px;
+      display: none;
+    }
+    .project-body.open { display: block; }
+    .usage-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 12px; }
+    .usage-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: var(--bg);
+      border-radius: 9px;
+    }
+    .usage-swatch {
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(0,0,0,0.1);
+      flex-shrink: 0;
+    }
+    .usage-name { flex: 1; font-size: 0.87rem; }
+    .usage-count { font-weight: 700; color: var(--primary); font-size: 0.9rem; }
+    .btn-usage-del {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+      padding: 2px 4px;
+      border-radius: 4px;
+      opacity: 0.5;
+      transition: opacity 0.2s;
+    }
+    .btn-usage-del:hover { opacity: 1; color: var(--danger); }
+
+    /* Buttons */
+    .btn {
+      padding: 9px 18px;
+      border-radius: 9px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.87rem;
+      transition: all 0.18s;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: #5a4fcf; transform: translateY(-1px); }
+    .btn-secondary { background: var(--bg); color: var(--text); border: 1.5px solid var(--border); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-sm { padding: 6px 12px; font-size: 0.82rem; }
+    .btn-danger-outline { background: transparent; color: var(--danger); border: 1.5px solid var(--danger); }
+    .btn-danger-outline:hover { background: var(--danger); color: white; }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(45,52,54,0.45);
+      backdrop-filter: blur(2px);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal {
+      background: white;
+      border-radius: 18px;
+      padding: 26px;
+      width: 100%;
+      max-width: 420px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+      animation: modalIn 0.2s ease;
+    }
+    @keyframes modalIn { from { opacity:0; transform: scale(0.95) translateY(10px); } to { opacity:1; transform: none; } }
+    .modal-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: var(--text);
+    }
+    .form-group { margin-bottom: 15px; }
+    .form-label { display: block; font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+    .form-input {
+      width: 100%;
+      padding: 10px 13px;
+      border: 1.5px solid var(--border);
+      border-radius: 9px;
+      font-size: 0.88rem;
+      outline: none;
+      transition: border 0.2s;
+      font-family: inherit;
+    }
+    .form-input:focus { border-color: var(--primary); }
+    .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+    .color-preview-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .color-preview-swatch {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    /* Settings hint */
+    .hint-box {
+      background: #fff9e6;
+      border: 1.5px solid #ffeaa7;
+      border-radius: 10px;
+      padding: 11px 14px;
+      font-size: 0.82rem;
+      color: #7d6608;
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+    .hint-box a { color: var(--primary); }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
+    .empty-state .empty-icon { font-size: 3rem; margin-bottom: 10px; }
+    .empty-state p { font-size: 0.88rem; }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 20px;
+      background: #2d3436;
+      color: white;
+      padding: 11px 18px;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all 0.25s;
+      z-index: 400;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.success { background: var(--success); }
+    .toast.error { background: var(--danger); }
+
+    /* Color picker input */
+    input[type="color"] {
+      -webkit-appearance: none;
+      padding: 2px;
+      cursor: pointer;
+      height: 44px;
+    }
+
+    @media (max-width: 500px) {
+      .color-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+      .stats-bar { gap: 8px; }
+      .content { padding: 14px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <h1>🫧 拼豆计数</h1>
+  <div class="sync-status">
+    <div class="sync-dot" id="syncDot"></div>
+    <span id="syncText">加载中…</span>
+  </div>
+  <button class="btn-icon" onclick="openSettings()" title="设置">⚙️</button>
+</header>
+
+<!-- Tabs -->
+<nav class="tabs">
+  <div class="tab active" onclick="switchTab('inventory')">库存管理</div>
+  <div class="tab" onclick="switchTab('projects')">项目记录</div>
+</nav>
+
+<!-- Content -->
+<main class="content">
+  <!-- Inventory -->
+  <div class="tab-panel active" id="tab-inventory">
+    <div class="stats-bar" id="inventoryStats"></div>
+    <div class="section-header">
+      <span class="section-title">颜色库存</span>
+    </div>
+    <div class="color-grid" id="colorGrid"></div>
+  </div>
+
+  <!-- Projects -->
+  <div class="tab-panel" id="tab-projects">
+    <div class="section-header">
+      <span class="section-title">项目列表</span>
+      <button class="btn btn-primary btn-sm" onclick="openAddProject()">+ 新建项目</button>
+    </div>
+    <div class="project-list" id="projectList"></div>
+  </div>
+</main>
+
+<!-- Modal Overlay -->
+<div class="modal-overlay" id="modalOverlay" style="display:none" onclick="onOverlayClick(event)">
+
+  <!-- Color Modal -->
+  <div class="modal" id="colorModal" style="display:none">
+    <div class="modal-title" id="colorModalTitle">添加颜色</div>
+    <div class="form-group">
+      <label class="form-label">颜色名称</label>
+      <input class="form-input" id="colorName" placeholder="例：白色、深海蓝" maxlength="30" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">颜色</label>
+      <div class="color-preview-row">
+        <input type="color" class="form-input" id="colorHex" value="#ff6b6b"
+          style="flex:1;height:44px;padding:4px" oninput="updateColorPreview()" />
+        <div class="color-preview-swatch" id="colorPreviewSwatch" style="background:#ff6b6b"></div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">库存数量</label>
+      <input class="form-input" id="colorCount" type="number" min="0" placeholder="0" value="0" />
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveColor()">保存</button>
+    </div>
+  </div>
+
+  <!-- Project Modal -->
+  <div class="modal" id="projectModal" style="display:none">
+    <div class="modal-title">新建项目</div>
+    <div class="form-group">
+      <label class="form-label">项目名称</label>
+      <input class="form-input" id="projectName" placeholder="例：皮卡丘、星之卡比" maxlength="40" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">备注（可选）</label>
+      <input class="form-input" id="projectDesc" placeholder="尺寸、难度、参考图…" maxlength="80" />
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveProject()">创建</button>
+    </div>
+  </div>
+
+  <!-- Usage Modal -->
+  <div class="modal" id="usageModal" style="display:none">
+    <div class="modal-title">记录用量</div>
+    <div class="form-group">
+      <label class="form-label">颜色</label>
+      <select class="form-input" id="usageColorId"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">使用数量（颗）</label>
+      <input class="form-input" id="usageCount" type="number" min="1" placeholder="例：150" />
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveUsage()">记录</button>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal" id="settingsModal" style="display:none">
+    <div class="modal-title">⚙️ 设置</div>
+    <div class="hint-box">
+      数据通过 GitHub API 同步到仓库的 <code>data.json</code> 文件，跨设备共享。<br>
+      Token 仅存在本地浏览器，不会提交到代码。<br>
+      需要在 GitHub → Settings → Developer Settings → Personal access tokens 中生成，勾选 <strong>repo</strong> 权限。
+    </div>
+    <div class="form-group">
+      <label class="form-label">仓库名称</label>
+      <input class="form-input" id="settingsRepo" placeholder="pinzhu-counter" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">GitHub Personal Access Token</label>
+      <input class="form-input" id="settingsToken" type="password" placeholder="ghp_xxxxxxxxxxxxxxxx" />
+    </div>
+    <div id="settingsError" style="color:var(--danger);font-size:0.82rem;margin-bottom:8px;display:none"></div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" id="settingsSaveBtn" onclick="saveSettings()">保存并同步</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── Config ───────────────────────────────────────────
+const GITHUB_USER = 'luomi16';
+
+// ─── State ────────────────────────────────────────────
+let state = { colors: [], projects: [], sha: null };
+let editingColorId = null;
+let editingProjectId = null;
+let saveTimer = null;
+let openProjectId = null;
+
+// ─── Settings ─────────────────────────────────────────
+function cfg() {
+  return {
+    repo:  localStorage.getItem('pb_repo')  || 'pinzhu-counter',
+    token: localStorage.getItem('pb_token') || '',
+  };
+}
+
+function openSettings() {
+  const s = cfg();
+  document.getElementById('settingsRepo').value  = s.repo;
+  document.getElementById('settingsToken').value = s.token;
+  document.getElementById('settingsError').style.display = 'none';
+  showModal('settingsModal');
+}
+
+async function saveSettings() {
+  const repo  = document.getElementById('settingsRepo').value.trim();
+  const token = document.getElementById('settingsToken').value.trim();
+  const errEl = document.getElementById('settingsError');
+  if (!repo)  { errEl.textContent = '请输入仓库名称'; errEl.style.display='block'; return; }
+  if (!token) { errEl.textContent = '请输入 Token'; errEl.style.display='block'; return; }
+  localStorage.setItem('pb_repo',  repo);
+  localStorage.setItem('pb_token', token);
+  closeModal();
+  await loadData();
+}
+
+// ─── GitHub API ───────────────────────────────────────
+async function ghGet() {
+  const { repo, token } = cfg();
+  const url = `https://api.github.com/repos/${GITHUB_USER}/${repo}/contents/data.json`;
+  const headers = { Accept: 'application/vnd.github.v3+json' };
+  if (token) headers.Authorization = `token ${token}`;
+  const res = await fetch(url, { headers });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function ghPut(data) {
+  const { repo, token } = cfg();
+  if (!token) throw new Error('需要设置 Token 才能保存');
+  const url = `https://api.github.com/repos/${GITHUB_USER}/${repo}/contents/data.json`;
+  const content = btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2))));
+  const body = { message: `sync ${new Date().toISOString()}`, content };
+  if (state.sha) body.sha = state.sha;
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `token ${token}`,
+      Accept: 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.message || `HTTP ${res.status}`);
+  }
+  const json = await res.json();
+  state.sha = json.content.sha;
+}
+
+// ─── Load / Save ──────────────────────────────────────
+async function loadData() {
+  setSyncStatus('syncing', '同步中…');
+  try {
+    const file = await ghGet();
+    if (file) {
+      state.sha = file.sha;
+      const decoded = decodeURIComponent(escape(atob(file.content.replace(/\s/g, ''))));
+      const data = JSON.parse(decoded);
+      state.colors   = data.colors   || [];
+      state.projects = data.projects || [];
+      localStorage.setItem('pb_cache', JSON.stringify({ colors: state.colors, projects: state.projects }));
+    } else {
+      // File not found — first run, use cache if any
+      const cache = localStorage.getItem('pb_cache');
+      if (cache) { const d = JSON.parse(cache); state.colors = d.colors||[]; state.projects = d.projects||[]; }
+    }
+    setSyncStatus('ok', '已同步');
+  } catch (e) {
+    setSyncStatus('error', '加载失败');
+    // Fallback to local cache
+    const cache = localStorage.getItem('pb_cache');
+    if (cache) {
+      const d = JSON.parse(cache);
+      state.colors = d.colors||[];
+      state.projects = d.projects||[];
+      showToast('离线模式（使用缓存）', '');
+    } else {
+      // No token set yet — prompt settings
+      if (!cfg().token) openSettings();
+      else showToast('加载失败：' + e.message, 'error');
+    }
+  }
+  render();
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(doSave, 1000);
+}
+
+async function doSave() {
+  setSyncStatus('syncing', '保存中…');
+  const data = { colors: state.colors, projects: state.projects, lastUpdated: new Date().toISOString() };
+  localStorage.setItem('pb_cache', JSON.stringify({ colors: state.colors, projects: state.projects }));
+  try {
+    await ghPut(data);
+    setSyncStatus('ok', '已同步');
+    showToast('已保存到 GitHub ✓', 'success');
+  } catch (e) {
+    setSyncStatus('error', '同步失败');
+    showToast('同步失败：' + e.message, 'error');
+  }
+}
+
+function setSyncStatus(s, text) {
+  document.getElementById('syncDot').className = 'sync-dot' + (s !== 'ok' ? ' ' + s : '');
+  document.getElementById('syncText').textContent = text;
+}
+
+// ─── Render ───────────────────────────────────────────
+function render() {
+  renderInventory();
+  renderProjects();
+}
+
+function renderInventory() {
+  const total = state.colors.reduce((n, c) => n + (c.count || 0), 0);
+  document.getElementById('inventoryStats').innerHTML = `
+    <div class="stat-chip"><strong>${state.colors.length}</strong>种颜色</div>
+    <div class="stat-chip"><strong>${total.toLocaleString()}</strong>颗总库存</div>
+  `;
+
+  let html = state.colors.map(c => `
+    <div class="color-card">
+      <div class="card-actions">
+        <button class="btn-tiny" onclick="openEditColor('${c.id}')" title="编辑">✏️</button>
+        <button class="btn-tiny" onclick="deleteColor('${c.id}')" title="删除">🗑️</button>
+      </div>
+      <div class="color-swatch-row">
+        <div class="color-swatch" style="background:${c.hex}"></div>
+        <div class="color-name">${esc(c.name)}</div>
+      </div>
+      <div class="color-count" style="color:${c.hex}">${(c.count||0).toLocaleString()}</div>
+      <div class="color-count-label">颗</div>
+      <div class="color-controls">
+        <button class="btn-count minus" onclick="adjustCount('${c.id}',-1)">−</button>
+        <input class="count-input" type="number" min="0" value="${c.count||0}"
+          style="border-color:${c.hex}55"
+          onchange="setCount('${c.id}',this.value)"
+          onblur="setCount('${c.id}',this.value)" />
+        <button class="btn-count plus" onclick="adjustCount('${c.id}',1)">+</button>
+      </div>
+    </div>
+  `).join('');
+
+  html += `<button class="add-color-btn" onclick="openAddColor()">
+    <span class="plus-icon">＋</span>添加颜色
+  </button>`;
+
+  document.getElementById('colorGrid').innerHTML = html;
+}
+
+function renderProjects() {
+  const list = document.getElementById('projectList');
+  if (!state.projects.length) {
+    list.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">🎨</div>
+      <p>还没有项目，点击右上角"新建项目"开始</p>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = state.projects.map(proj => {
+    const total = (proj.usage||[]).reduce((n,u) => n+(u.count||0), 0);
+    const isOpen = openProjectId === proj.id;
+    const usageRows = (proj.usage||[]).map(u => {
+      const color = state.colors.find(c => c.id === u.colorId);
+      if (!color) return '';
+      return `<div class="usage-item">
+        <div class="usage-swatch" style="background:${color.hex}"></div>
+        <span class="usage-name">${esc(color.name)}</span>
+        <span class="usage-count">${u.count.toLocaleString()} 颗</span>
+        <button class="btn-usage-del" onclick="deleteUsage('${proj.id}','${u.colorId}')">✕</button>
+      </div>`;
+    }).join('');
+
+    return `<div class="project-card">
+      <div class="project-header" onclick="toggleProject('${proj.id}')">
+        <div class="project-info">
+          <div class="project-name">${esc(proj.name)}</div>
+          <div class="project-meta">${proj.description ? esc(proj.description)+' · ' : ''}${total.toLocaleString()} 颗 · ${proj.createdAt}</div>
+        </div>
+        <div class="project-header-right">
+          <button class="btn btn-secondary btn-sm" onclick="openAddUsage(event,'${proj.id}')">+ 记录用量</button>
+          <button class="btn btn-danger-outline btn-sm" onclick="deleteProject(event,'${proj.id}')">删除</button>
+          <span class="project-arrow${isOpen?' open':''}" id="arrow-${proj.id}">›</span>
+        </div>
+      </div>
+      <div class="project-body${isOpen?' open':''}" id="body-${proj.id}">
+        <div class="usage-list">
+          ${usageRows || '<p style="color:var(--text-secondary);font-size:0.85rem;padding:4px 0">暂无用量记录，点击"+ 记录用量"添加</p>'}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ─── Inventory Actions ────────────────────────────────
+function openAddColor() {
+  editingColorId = null;
+  document.getElementById('colorModalTitle').textContent = '添加颜色';
+  document.getElementById('colorName').value  = '';
+  document.getElementById('colorHex').value   = '#ff6b6b';
+  document.getElementById('colorCount').value = '0';
+  document.getElementById('colorPreviewSwatch').style.background = '#ff6b6b';
+  showModal('colorModal');
+  setTimeout(() => document.getElementById('colorName').focus(), 100);
+}
+
+function openEditColor(id) {
+  editingColorId = id;
+  const c = state.colors.find(x => x.id === id);
+  if (!c) return;
+  document.getElementById('colorModalTitle').textContent = '编辑颜色';
+  document.getElementById('colorName').value  = c.name;
+  document.getElementById('colorHex').value   = c.hex;
+  document.getElementById('colorCount').value = c.count || 0;
+  document.getElementById('colorPreviewSwatch').style.background = c.hex;
+  showModal('colorModal');
+}
+
+function updateColorPreview() {
+  document.getElementById('colorPreviewSwatch').style.background =
+    document.getElementById('colorHex').value;
+}
+
+function saveColor() {
+  const name  = document.getElementById('colorName').value.trim();
+  const hex   = document.getElementById('colorHex').value;
+  const count = Math.max(0, parseInt(document.getElementById('colorCount').value) || 0);
+  if (!name) { showToast('请输入颜色名称', 'error'); return; }
+  if (editingColorId) {
+    const c = state.colors.find(x => x.id === editingColorId);
+    if (c) Object.assign(c, { name, hex, count });
+  } else {
+    state.colors.push({ id: uid(), name, hex, count });
+  }
+  closeModal();
+  render();
+  scheduleSave();
+}
+
+function adjustCount(id, delta) {
+  const c = state.colors.find(x => x.id === id);
+  if (!c) return;
+  c.count = Math.max(0, (c.count||0) + delta);
+  renderInventory();
+  scheduleSave();
+}
+
+function setCount(id, val) {
+  const c = state.colors.find(x => x.id === id);
+  if (!c) return;
+  c.count = Math.max(0, parseInt(val) || 0);
+  scheduleSave();
+}
+
+function deleteColor(id) {
+  if (!confirm('确定删除这个颜色？相关用量记录也会失效。')) return;
+  state.colors = state.colors.filter(x => x.id !== id);
+  render();
+  scheduleSave();
+}
+
+// ─── Project Actions ──────────────────────────────────
+function openAddProject() {
+  document.getElementById('projectName').value = '';
+  document.getElementById('projectDesc').value = '';
+  showModal('projectModal');
+  setTimeout(() => document.getElementById('projectName').focus(), 100);
+}
+
+function saveProject() {
+  const name = document.getElementById('projectName').value.trim();
+  const desc = document.getElementById('projectDesc').value.trim();
+  if (!name) { showToast('请输入项目名称', 'error'); return; }
+  const proj = { id: uid(), name, description: desc, createdAt: today(), usage: [] };
+  state.projects.unshift(proj);
+  openProjectId = proj.id;
+  closeModal();
+  render();
+  scheduleSave();
+}
+
+function deleteProject(e, id) {
+  e.stopPropagation();
+  if (!confirm('确定删除这个项目？')) return;
+  state.projects = state.projects.filter(p => p.id !== id);
+  if (openProjectId === id) openProjectId = null;
+  render();
+  scheduleSave();
+}
+
+function toggleProject(id) {
+  openProjectId = openProjectId === id ? null : id;
+  render();
+}
+
+function openAddUsage(e, projectId) {
+  e.stopPropagation();
+  if (!state.colors.length) { showToast('请先在库存中添加颜色', 'error'); return; }
+  editingProjectId = projectId;
+  document.getElementById('usageColorId').innerHTML =
+    state.colors.map(c => `<option value="${c.id}">${esc(c.name)}（库存 ${c.count||0}）</option>`).join('');
+  document.getElementById('usageCount').value = '';
+  showModal('usageModal');
+  setTimeout(() => document.getElementById('usageCount').focus(), 100);
+}
+
+function saveUsage() {
+  const colorId = document.getElementById('usageColorId').value;
+  const count   = parseInt(document.getElementById('usageCount').value) || 0;
+  if (count <= 0) { showToast('请输入有效数量', 'error'); return; }
+  const proj = state.projects.find(p => p.id === editingProjectId);
+  if (!proj) return;
+  const existing = proj.usage.find(u => u.colorId === colorId);
+  if (existing) existing.count += count;
+  else proj.usage.push({ colorId, count });
+  openProjectId = editingProjectId;
+  closeModal();
+  render();
+  scheduleSave();
+}
+
+function deleteUsage(projectId, colorId) {
+  const proj = state.projects.find(p => p.id === projectId);
+  if (!proj) return;
+  proj.usage = proj.usage.filter(u => u.colorId !== colorId);
+  render();
+  scheduleSave();
+}
+
+// ─── UI Helpers ───────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['inventory','projects'][i] === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => {
+    p.classList.toggle('active', p.id === 'tab-' + name);
+  });
+}
+
+function showModal(id) {
+  document.getElementById('modalOverlay').style.display = 'flex';
+  document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+  document.getElementById(id).style.display = 'block';
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').style.display = 'none';
+}
+
+function onOverlayClick(e) {
+  if (e.target === document.getElementById('modalOverlay')) closeModal();
+}
+
+// Close modal on Escape
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+let toastTimer = null;
+function showToast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = 'toast', 3000);
+}
+
+function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+function today() { return new Date().toLocaleDateString('zh-CN'); }
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Init ─────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
