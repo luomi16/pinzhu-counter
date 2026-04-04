@@ -120,6 +120,37 @@
       letter-spacing: 0.8px;
     }
 
+    /* Filter bar */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .filter-divider {
+      width: 1px;
+      height: 22px;
+      background: var(--border);
+      margin: 0 2px;
+      flex-shrink: 0;
+    }
+    .btn-filter {
+      padding: 5px 12px;
+      border-radius: 20px;
+      border: 1.5px solid var(--border);
+      background: white;
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-filter:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-filter.active { background: var(--primary); color: white; border-color: var(--primary); }
+    .btn-filter.active-has { background: #00b894; color: white; border-color: #00b894; }
+
     /* Color Grid */
     .color-grid {
       display: grid;
@@ -436,9 +467,7 @@
   <!-- Inventory -->
   <div class="tab-panel active" id="tab-inventory">
     <div class="stats-bar" id="inventoryStats"></div>
-    <div class="section-header">
-      <span class="section-title">颜色库存</span>
-    </div>
+    <div class="filter-bar" id="filterBar"></div>
     <div class="color-grid" id="colorGrid"></div>
   </div>
 
@@ -565,6 +594,8 @@ let editingColorId = null;
 let editingProjectId = null;
 let saveTimer = null;
 let openProjectId = null;
+let filterSeries = 'all';
+let filterHasBeads = false;
 
 // ─── Settings ─────────────────────────────────────────
 function cfg() {
@@ -711,12 +742,35 @@ function render() {
 
 function renderInventory() {
   const total = state.colors.reduce((n, c) => n + (c.count || 0), 0);
+
+  // Derive available series from colors
+  const seriesList = [...new Set(state.colors.map(c => c.id.match(/^[A-Za-z]+/)?.[0].toUpperCase()).filter(Boolean))].sort();
+
+  // Apply filters
+  let visible = state.colors;
+  if (filterSeries !== 'all') visible = visible.filter(c => c.id.toUpperCase().startsWith(filterSeries));
+  if (filterHasBeads) visible = visible.filter(c => (c.count || 0) > 0);
+
+  // Stats
   document.getElementById('inventoryStats').innerHTML = `
     <div class="stat-chip"><strong>${state.colors.length}</strong>种颜色</div>
     <div class="stat-chip"><strong>${total.toLocaleString()}</strong>颗总库存</div>
+    <div class="stat-chip"><strong>${state.colors.filter(c=>(c.count||0)>0).length}</strong>种有库存</div>
   `;
 
-  let html = state.colors.map(c => `
+  // Filter bar
+  const seriesBtns = seriesList.map(s =>
+    `<button class="btn-filter${filterSeries===s?' active':''}" onclick="setSeriesFilter('${s}')">${s}</button>`
+  ).join('');
+  document.getElementById('filterBar').innerHTML = `
+    <button class="btn-filter${filterSeries==='all'?' active':''}" onclick="setSeriesFilter('all')">全部</button>
+    ${seriesBtns}
+    <div class="filter-divider"></div>
+    <button class="btn-filter${filterHasBeads?' active-has':''}" onclick="toggleHasBeads()">🫧 仅显示有豆</button>
+  `;
+
+  // Grid
+  let html = visible.map(c => `
     <div class="color-card">
       <div class="card-actions">
         <button class="btn-tiny" onclick="openEditColor('${c.id}')" title="编辑">✏️</button>
@@ -739,11 +793,28 @@ function renderInventory() {
     </div>
   `).join('');
 
+  if (!visible.length) {
+    html = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon">🔍</div>
+      <p>没有符合条件的颜色</p>
+    </div>`;
+  }
+
   html += `<button class="add-color-btn" onclick="openAddColor()">
     <span class="plus-icon">＋</span>添加颜色
   </button>`;
 
   document.getElementById('colorGrid').innerHTML = html;
+}
+
+function setSeriesFilter(s) {
+  filterSeries = s;
+  renderInventory();
+}
+
+function toggleHasBeads() {
+  filterHasBeads = !filterHasBeads;
+  renderInventory();
 }
 
 function renderProjects() {
