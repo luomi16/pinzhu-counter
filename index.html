@@ -54,6 +54,7 @@
       flex-shrink: 0;
     }
     .sync-dot.syncing { background: #ffeaa7; animation: blink 0.8s infinite; }
+    .sync-dot.pending { background: #fdcb6e; }
     .sync-dot.error { background: #ff7675; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
     .btn-icon {
@@ -488,6 +489,7 @@
     <div class="sync-dot" id="syncDot"></div>
     <span id="syncText">加载中…</span>
   </div>
+  <button class="btn-icon" onclick="doSave()" title="手动同步到 GitHub">☁️</button>
   <button class="btn-icon" onclick="openSettings()" title="设置">⚙️</button>
 </header>
 
@@ -768,24 +770,37 @@ async function loadData() {
   render();
 }
 
+let dirty = false;
+
 function scheduleSave() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(doSave, 1000);
+  // Always save to localStorage immediately
+  localStorage.setItem('pb_cache', JSON.stringify({ colors: state.colors, projects: state.projects }));
+  dirty = true;
+  setSyncStatus('pending', '有未同步改动');
 }
 
 async function doSave() {
-  setSyncStatus('syncing', '保存中…');
+  if (!dirty) return;
+  setSyncStatus('syncing', '同步中…');
   const data = { colors: state.colors, projects: state.projects, lastUpdated: new Date().toISOString() };
-  localStorage.setItem('pb_cache', JSON.stringify({ colors: state.colors, projects: state.projects }));
   try {
     await ghPut(data);
+    dirty = false;
     setSyncStatus('ok', '已同步');
-    showToast('已保存到 GitHub ✓', 'success');
+    showToast('已同步到 GitHub ✓', 'success');
   } catch (e) {
     setSyncStatus('error', '同步失败');
     showToast('同步失败：' + e.message, 'error');
   }
 }
+
+// Sync on page hide (tab close / switch)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && dirty) doSave();
+});
+window.addEventListener('beforeunload', () => {
+  if (dirty) doSave();
+});
 
 function setSyncStatus(s, text) {
   document.getElementById('syncDot').className = 'sync-dot' + (s !== 'ok' ? ' ' + s : '');
