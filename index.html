@@ -120,6 +120,28 @@
       letter-spacing: 0.8px;
     }
 
+    /* Preset grid */
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .btn-preset {
+      padding: 14px 8px;
+      border-radius: 12px;
+      border: 2px solid var(--border);
+      background: var(--bg);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.18s;
+      font-family: inherit;
+    }
+    .btn-preset:hover { border-color: var(--primary); background: #f0eeff; }
+    .btn-preset:active { transform: scale(0.97); }
+    .btn-preset .preset-name { font-size: 1rem; font-weight: 700; color: var(--primary); display: block; }
+    .btn-preset .preset-count { font-size: 0.75rem; color: var(--text-secondary); display: block; margin-top: 3px; }
+
     /* Filter bar */
     .filter-bar {
       display: flex;
@@ -543,6 +565,20 @@
     </div>
   </div>
 
+  <!-- Quick Refill Modal -->
+  <div class="modal" id="refillModal" style="display:none">
+    <div class="modal-title">🫧 快速补充豆子</div>
+    <div class="form-group">
+      <label class="form-label">每个色号补充数量</label>
+      <input class="form-input" id="refillAmount" type="number" min="1" value="400" />
+    </div>
+    <div class="form-label" style="margin-bottom:10px">选择补充装规格</div>
+    <div class="preset-grid" id="presetGrid"></div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+    </div>
+  </div>
+
   <!-- Settings Modal -->
   <div class="modal" id="settingsModal" style="display:none">
     <div class="modal-title">⚙️ 设置</div>
@@ -587,6 +623,15 @@ const DEFAULT_COLORS = [
   {id:"H1",name:"H1",hex:"#FFFFFF",count:0},{id:"H2",name:"H2",hex:"#FBFBFB",count:0},{id:"H3",name:"H3",hex:"#B4B4B4",count:0},{id:"H4",name:"H4",hex:"#878787",count:0},{id:"H5",name:"H5",hex:"#464648",count:0},{id:"H6",name:"H6",hex:"#2C2C2C",count:0},{id:"H7",name:"H7",hex:"#010101",count:0},{id:"H8",name:"H8",hex:"#E7D6DC",count:0},{id:"H9",name:"H9",hex:"#EFEDEE",count:0},{id:"H10",name:"H10",hex:"#EBEBEB",count:0},{id:"H11",name:"H11",hex:"#CDCDCD",count:0},{id:"H12",name:"H12",hex:"#FDF6EE",count:0},{id:"H13",name:"H13",hex:"#F4EFD1",count:0},{id:"H14",name:"H14",hex:"#CED7D4",count:0},{id:"H15",name:"H15",hex:"#9AA6A6",count:0},{id:"H16",name:"H16",hex:"#1B1213",count:0},{id:"H17",name:"H17",hex:"#F0EEEF",count:0},{id:"H18",name:"H18",hex:"#FCFFF6",count:0},{id:"H19",name:"H19",hex:"#F2EEE5",count:0},{id:"H20",name:"H20",hex:"#96A09F",count:0},{id:"H21",name:"H21",hex:"#F8FBE6",count:0},{id:"H22",name:"H22",hex:"#CACAD2",count:0},{id:"H23",name:"H23",hex:"#9B9C94",count:0},
   {id:"M1",name:"M1",hex:"#BBC6B6",count:0},{id:"M2",name:"M2",hex:"#909994",count:0},{id:"M3",name:"M3",hex:"#697E80",count:0},{id:"M4",name:"M4",hex:"#E0D4BC",count:0},{id:"M5",name:"M5",hex:"#D1CCAF",count:0},{id:"M6",name:"M6",hex:"#B0AA86",count:0},{id:"M7",name:"M7",hex:"#B0A796",count:0},{id:"M8",name:"M8",hex:"#AE7F82",count:0},{id:"M9",name:"M9",hex:"#A68862",count:0},{id:"M10",name:"M10",hex:"#C4B3BB",count:0},{id:"M11",name:"M11",hex:"#9E7592",count:0},{id:"M12",name:"M12",hex:"#644A51",count:0},{id:"M13",name:"M13",hex:"#C79266",count:0},{id:"M14",name:"M14",hex:"#C27464",count:0},{id:"M15",name:"M15",hex:"#747D7A",count:0},
 ];
+
+// ─── Refill Presets ───────────────────────────────────
+const PRESETS = {
+  '72色':  ['A3','A4','A6','A7','A10','A11','A13','B3','B5','B7','B8','B10','B12','B14','B17','B18','B19','B20','C2','C3','C5','C6','C7','C8','C10','C11','C13','C16','D2','D3','D6','D7','D8','D9','D11','D12','D13','D14','D15','D16','D18','D19','D20','D21','E1','E2','E3','E4','E5','E7','E8','E12','E13','F5','F7','F8','F10','F13','G1','G2','G3','G5','G7','G8','G9','G13','H1','H2','H3','H4','H5','H7'],
+  '96色':  ['A3','A4','A6','A7','A10','A11','A12','A14','B3','B5','B7','B8','B10','B12','B14','B17','B18','B19','B20','C2','C3','C5','C6','C7','C8','C10','C11','C13','C16','D2','D3','D5','D6','D7','D8','D9','D11','D12','D13','D14','D15','D16','D18','D19','D20','D21','E1','E2','E3','E4','E5','E6','E7','E8','E9','E10','E11','E12','E13','E14','E15','F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12','F13','F14','G1','G2','G3','G5','G7','G8','G9','G13','G14','G17','H1','H2','H3','H4','H5','H6','H7','M5','M6','M9','M12'],
+  '120色': ['A1','A3','A4','A5','A6','A7','A8','A9','A10','A11','A12','A13','A14','A15','B1','B2','B3','B4','B5','B6','B7','B8','B10','B11','B12','B13','B14','B15','B16','B17','B18','B19','B20','C1','C2','C3','C4','C5','C6','C7','C8','C9','C10','C11','C13','C14','C15','C16','C17','D1','D2','D3','D5','D6','D7','D8','D9','D11','D12','D13','D14','D15','D16','D17','D18','D19','D20','D21','E1','E2','E3','E4','E5','E6','E7','E8','E9','E10','E11','E12','E13','E14','E15','F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12','F13','F14','G1','G2','G3','G5','G6','G7','G8','G9','G13','G14','G17','H1','H2','H4','H5','H6','H7','H9','H12','M5','M6','M9','M12'],
+  '144色': ['A1','A2','A3','A4','A5','A6','A7','A8','A9','A10','A11','A12','A13','A14','A15','B1','B2','B3','B4','B5','B6','B7','B8','B10','B11','B12','B13','B14','B15','B16','B17','B18','B19','B20','C1','C2','C3','C4','C5','C6','C7','C8','C9','C10','C11','C13','C14','C15','C16','C17','D1','D2','D3','D5','D6','D7','D8','D9','D11','D12','D13','D14','D15','D16','D17','D18','D19','D20','D21','E1','E2','E3','E4','E5','E6','E7','E8','E9','E10','E11','E12','E13','E14','E15','F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12','F13','F14','G1','G2','G3','G4','G5','G6','G7','G8','G9','G10','G11','G12','G13','G14','G15','G16','G17','H1','H2','H3','H4','H5','H6','H7','H8','H9','H10','H11','H12','H13','H14','M1','M2','M3','M4','M5','M6','M7','M8','M9','M10','M11','M12','M13','M14','M15'],
+  '221色': null,
+};
 
 // ─── State ────────────────────────────────────────────
 let state = { colors: [], projects: [], sha: null };
@@ -756,6 +801,7 @@ function renderInventory() {
     <div class="stat-chip"><strong>${state.colors.length}</strong>种颜色</div>
     <div class="stat-chip"><strong>${total.toLocaleString()}</strong>颗总库存</div>
     <div class="stat-chip"><strong>${state.colors.filter(c=>(c.count||0)>0).length}</strong>种有库存</div>
+    <button class="btn btn-primary btn-sm" onclick="openQuickRefill()" style="margin-left:auto">🫧 快速补充</button>
   `;
 
   // Filter bar
@@ -805,6 +851,37 @@ function renderInventory() {
   </button>`;
 
   document.getElementById('colorGrid').innerHTML = html;
+}
+
+// ─── Quick Refill ─────────────────────────────────────
+function openQuickRefill() {
+  document.getElementById('refillAmount').value = '400';
+  // Render preset buttons
+  const grid = document.getElementById('presetGrid');
+  grid.innerHTML = Object.entries(PRESETS).map(([name, ids]) => {
+    const count = ids ? ids.length : state.colors.length;
+    return `<button class="btn-preset" onclick="applyRefill('${name}')">
+      <span class="preset-name">${name}</span>
+      <span class="preset-count">${count} 个色号</span>
+    </button>`;
+  }).join('');
+  showModal('refillModal');
+}
+
+function applyRefill(presetName) {
+  const amount = parseInt(document.getElementById('refillAmount').value) || 400;
+  if (amount <= 0) { showToast('请输入有效数量', 'error'); return; }
+  const ids = PRESETS[presetName];
+  const targets = ids ? ids : state.colors.map(c => c.id);
+  let applied = 0;
+  targets.forEach(id => {
+    const c = state.colors.find(x => x.id === id);
+    if (c) { c.count = (c.count || 0) + amount; applied++; }
+  });
+  closeModal();
+  render();
+  scheduleSave();
+  showToast(`已为 ${applied} 个色号各补充 ${amount} 颗`, 'success');
 }
 
 function setSeriesFilter(s) {
