@@ -1327,6 +1327,14 @@
       "count": 0
     }
   ],
-  "projects": [],
-  "lastUpdated": "2026-04-05T05:50:55.689Z"
+  "projects": [
+    {
+      "id": "bbj7qtgvu6mnlcfm5t",
+      "name": "Piano 小羊杯垫",
+      "description": "",
+      "createdAt": "2026/4/5",
+      "usage": []
+    }
+  ],
+  "lastUpdated": "2026-04-05T05:51:31.828Z"
 }
