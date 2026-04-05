@@ -30,7 +30,20 @@ let editingProjectId = null;
 let openProjectId = null;
 let filterSeries = 'all';
 let filterHasBeads = false;
+let filterSortAsc = false;
 let dirty = false;
+
+// ─── History (last 10 batches) ────────────────────────
+// Each entry: { id, time, label, items: [{colorId, before, after}] }
+let history = [];
+const HISTORY_MAX = 10;
+
+function recordHistory(label, items) {
+  if (!items.length) return;
+  history.unshift({ id: uid(), time: new Date().toISOString(), label, items });
+  if (history.length > HISTORY_MAX) history.length = HISTORY_MAX;
+  renderHistory();
+}
 
 // ─── Settings ─────────────────────────────────────────
 function cfg() {
@@ -178,6 +191,7 @@ function setSyncStatus(s, text) {
 function render() {
   renderInventory();
   renderProjects();
+  renderHistory();
 }
 
 function renderInventory() {
@@ -187,6 +201,7 @@ function renderInventory() {
   let visible = state.colors;
   if (filterSeries !== 'all') visible = visible.filter(c => c.id.toUpperCase().startsWith(filterSeries));
   if (filterHasBeads) visible = visible.filter(c => (c.count || 0) > 0);
+  if (filterSortAsc) visible = [...visible].sort((a, b) => (a.count||0) - (b.count||0));
 
   document.getElementById('inventoryStats').innerHTML = `
     <div class="stat-chip"><strong>${state.colors.length}</strong>种颜色</div>
@@ -203,6 +218,7 @@ function renderInventory() {
     ${seriesBtns}
     <div class="filter-divider"></div>
     <button class="btn-filter${filterHasBeads?' active-has':''}" onclick="toggleHasBeads()">🫧 仅显示有豆</button>
+    <button class="btn-filter${filterSortAsc?' active':''}" onclick="toggleSortAsc()">↑ 由少到多</button>
   `;
 
   let html = visible.map(c => `
@@ -262,15 +278,20 @@ function applyRefill(presetName) {
   if (amount <= 0) { showToast('请输入有效数量', 'error'); return; }
   const ids = PRESETS[presetName];
   const targets = ids ? ids : state.colors.map(c => c.id);
-  let applied = 0;
+  const histItems = [];
   targets.forEach(id => {
     const c = state.colors.find(x => x.id === id);
-    if (c) { c.count = (c.count || 0) + amount; applied++; }
+    if (c) {
+      const before = c.count || 0;
+      c.count = before + amount;
+      histItems.push({ colorId: c.id, before, after: c.count });
+    }
   });
+  recordHistory(`补充 ${presetName}（各+${amount}）`, histItems);
   closeModal();
   render();
   scheduleSave();
-  showToast(`已为 ${applied} 个色号各补充 ${amount} 颗`, 'success');
+  showToast(`已为 ${histItems.length} 个色号各补充 ${amount} 颗`, 'success');
 }
 
 function setSeriesFilter(s) {
@@ -281,6 +302,65 @@ function setSeriesFilter(s) {
 function toggleHasBeads() {
   filterHasBeads = !filterHasBeads;
   renderInventory();
+}
+
+function toggleSortAsc() {
+  filterSortAsc = !filterSortAsc;
+  renderInventory();
+}
+
+function toggleHistoryPanel() {
+  const panel = document.getElementById('historyPanel');
+  const toggle = document.getElementById('historyToggle');
+  const isHidden = panel.style.display === 'none';
+  panel.style.display = isHidden ? '' : 'none';
+  toggle.textContent = isHidden ? '▾' : '▸';
+}
+
+function renderHistory() {
+  const el = document.getElementById('historyList');
+  if (!el) return;
+  if (!history.length) {
+    el.innerHTML = '<div class="history-empty">暂无更新记录</div>';
+    return;
+  }
+  el.innerHTML = history.map(entry => {
+    const time = new Date(entry.time).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    const swatches = entry.items.slice(0, 8).map(item => {
+      const color = state.colors.find(c => c.id === item.colorId);
+      const hex = color ? color.hex : '#ccc';
+      const delta = item.after - item.before;
+      return `<div class="history-swatch" style="background:${hex}" title="${item.colorId} ${delta >= 0 ? '+' : ''}${delta}"></div>`;
+    }).join('');
+    const more = entry.items.length > 8 ? `<span class="history-more">+${entry.items.length - 8}</span>` : '';
+    const totalDelta = entry.items.reduce((s, i) => s + (i.after - i.before), 0);
+    const deltaStr = `${totalDelta >= 0 ? '+' : ''}${totalDelta.toLocaleString()}`;
+    return `<div class="history-entry">
+      <div class="history-meta">
+        <span class="history-label">${esc(entry.label)}</span>
+        <span class="history-time">${time}</span>
+      </div>
+      <div class="history-row">
+        <div class="history-swatches">${swatches}${more}</div>
+        <span class="history-delta ${totalDelta >= 0 ? 'delta-pos' : 'delta-neg'}">${deltaStr} 颗</span>
+        <button class="btn-tiny" onclick="undoHistory('${entry.id}')" title="撤销此次更新">↩</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function undoHistory(id) {
+  const entry = history.find(e => e.id === id);
+  if (!entry) return;
+  if (!confirm(`撤销「${entry.label}」？将恢复 ${entry.items.length} 个色号到更新前的数量。`)) return;
+  entry.items.forEach(item => {
+    const c = state.colors.find(x => x.id === item.colorId);
+    if (c) c.count = item.before;
+  });
+  history = history.filter(e => e.id !== id);
+  render();
+  scheduleSave();
+  showToast('已撤销', 'success');
 }
 
 function renderProjects() {
@@ -364,9 +444,15 @@ function saveColor() {
   if (!name) { showToast('请输入颜色名称', 'error'); return; }
   if (editingColorId) {
     const c = state.colors.find(x => x.id === editingColorId);
-    if (c) Object.assign(c, { name, hex, count });
+    if (c) {
+      const before = c.count || 0;
+      Object.assign(c, { name, hex, count });
+      if (before !== count) recordHistory(`编辑 ${name}`, [{ colorId: c.id, before, after: count }]);
+    }
   } else {
-    state.colors.push({ id: uid(), name, hex, count });
+    const newColor = { id: uid(), name, hex, count };
+    state.colors.push(newColor);
+    if (count > 0) recordHistory(`添加 ${name}`, [{ colorId: newColor.id, before: 0, after: count }]);
   }
   closeModal();
   render();
@@ -376,7 +462,9 @@ function saveColor() {
 function adjustCount(id, delta) {
   const c = state.colors.find(x => x.id === id);
   if (!c) return;
-  c.count = Math.max(0, (c.count||0) + delta);
+  const before = c.count || 0;
+  c.count = Math.max(0, before + delta);
+  if (c.count !== before) recordHistory(`${c.name} ${delta > 0 ? '+' : ''}${delta}`, [{ colorId: id, before, after: c.count }]);
   renderInventory();
   scheduleSave();
 }
@@ -384,7 +472,9 @@ function adjustCount(id, delta) {
 function setCount(id, val) {
   const c = state.colors.find(x => x.id === id);
   if (!c) return;
+  const before = c.count || 0;
   c.count = Math.max(0, parseInt(val) || 0);
+  if (c.count !== before) recordHistory(`${c.name} 设为 ${c.count}`, [{ colorId: id, before, after: c.count }]);
   scheduleSave();
 }
 
@@ -774,14 +864,20 @@ function applyDeduction() {
 
   if (!confirm(confirmMsg)) return;
 
+  const histItems = [];
   valid.forEach(row => {
     const c = state.colors.find(x => x.id === row.colorId.toUpperCase());
-    if (c) c.count = Math.max(0, (c.count || 0) - row.qty);
+    if (c) {
+      const before = c.count || 0;
+      c.count = Math.max(0, before - row.qty);
+      histItems.push({ colorId: c.id, before, after: c.count });
+    }
   });
+  recordHistory(`图纸扣减（${histItems.length} 色）`, histItems);
 
   render();
   scheduleSave();
-  renderAnalysisTable(); // Refresh diff column
+  renderAnalysisTable();
 
   if (insufficient.length) {
     showToast(`扣减完成，${insufficient.length} 个色号库存不足已置零`, 'error');
